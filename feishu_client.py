@@ -112,6 +112,9 @@ class FeishuClient:
         Raises:
             最后一次尝试的异常
         """
+        # 不可重试的错误码：重试也不会成功，且每次重试都消耗一次 Lark API 额度
+        NON_RETRYABLE = ("99991403",)  # 99991403 = 本月 API 额度已用尽
+
         delay = initial_delay
         last_error = None
 
@@ -120,6 +123,9 @@ class FeishuClient:
                 return await coro_func()
             except Exception as e:
                 last_error = e
+                if any(code in str(e) for code in NON_RETRYABLE):
+                    print(f"[retry] 不可重试错误，立即放弃（省额度）: {e}", flush=True)
+                    break
                 if attempt < max_retries:
                     print(f"[retry] 第 {attempt + 1} 次失败，{delay:.1f}s 后重试: {e}", flush=True)
                     await asyncio.sleep(delay)
