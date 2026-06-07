@@ -291,6 +291,24 @@ async def handle_message_async(event: P2ImMessageReceiveV1):
             sys.stdout.flush()
 
 
+def _save_outbox(user_msg: str, reply: str):
+    """Lark 发送失败时把结果写入本地 outbox，避免结果丢失。
+    额度耗尽时仍可在 Mac 上 `cat logs/outbox-<bot>.md` 查看（或经远程 shell）。"""
+    try:
+        from datetime import datetime
+        bot = os.getenv("BOT_NAME", "bot")
+        d = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, f"outbox-{bot}.md"), "a", encoding="utf-8") as f:
+            f.write(
+                f"\n## {datetime.now():%Y-%m-%d %H:%M:%S}\n"
+                f"**问:** {user_msg}\n\n**答:**\n{reply}\n\n---\n"
+            )
+        print(f"[outbox] 结果已存本地 logs/outbox-{bot}.md", flush=True)
+    except Exception as e:
+        print(f"[warn] 写 outbox 失败: {e}", flush=True)
+
+
 async def _run_and_display(
     user_id: str, chat_id: str, is_group: bool,
     text: str, card_msg_id: str, session, notify_msg_id: str,
@@ -420,7 +438,8 @@ async def _run_and_display(
     card_patched = False
     if card_msg_id is None:
         # 占位卡片未发出（额度?）：任务已执行、副作用已生效，仅无法回传结果文字
-        print("[warn] 无卡片可回传，任务已完成（副作用已生效），跳过结果发送", flush=True)
+        print("[warn] 无卡片可回传，任务已完成（副作用已生效），结果存入 outbox", flush=True)
+        _save_outbox(text, final)
         return
     try:
         if options:
@@ -443,6 +462,7 @@ async def _run_and_display(
                 await feishu.send_text_to_user(user_id, final)
         except Exception as fallback_err:
             print(f"[error] 文本回退也失败: {fallback_err}", flush=True)
+            _save_outbox(text, final)  # Lark 彻底发不出（如额度耗尽），存本地
 
     if card_patched:
         try:
