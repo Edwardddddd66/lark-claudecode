@@ -310,8 +310,8 @@ async def _run_and_display(
 
     async def push(content: str):
         nonlocal push_failures
-        if push_failures >= 3:
-            return
+        if card_msg_id is None or push_failures >= 3:
+            return  # 没有可更新的卡片（占位卡片发送失败）则跳过
         try:
             await feishu.update_card(card_msg_id, content)
             push_failures = 0
@@ -418,6 +418,10 @@ async def _run_and_display(
         )
     options = _extract_options(final) or ask_options
     card_patched = False
+    if card_msg_id is None:
+        # 占位卡片未发出（额度?）：任务已执行、副作用已生效，仅无法回传结果文字
+        print("[warn] 无卡片可回传，任务已完成（副作用已生效），跳过结果发送", flush=True)
+        return
     try:
         if options:
             buttons = [
@@ -550,7 +554,10 @@ async def _process_message(user_id: str, chat_id: str, is_group: bool, msg):
     session = await store.get_current(user_id, chat_id)
     print(f"[Claude] session={session.session_id} model={session.model}", flush=True)
 
-    # 1. 发送"思考中"占位卡片，拿到 message_id
+    # 1. 发送"思考中"占位卡片，拿到 message_id。
+    #    发送失败（如 Lark 额度用尽 99991403）不阻断任务——仍继续执行 Claude，
+    #    让文件编辑/构建等副作用照常发生，只是没有实时卡片（card_msg_id=None）。
+    card_msg_id = None
     try:
         if is_group:
             card_msg_id = await feishu.reply_card(msg.message_id, loading=True)
@@ -558,15 +565,7 @@ async def _process_message(user_id: str, chat_id: str, is_group: bool, msg):
             card_msg_id = await feishu.send_card_to_user(user_id, loading=True)
         print(f"[卡片] card_msg_id={card_msg_id}", flush=True)
     except Exception as e:
-        print(f"[error] 发送占位卡片失败: {e}", flush=True)
-        if is_group:
-            try:
-                await feishu.reply_card(msg.message_id, content=f"❌ 发送消息失败：{e}", loading=False)
-            except Exception:
-                pass
-        else:
-            await feishu.send_text_to_user(user_id, f"❌ 发送消息失败：{e}")
-        return
+        print(f"[warn] 占位卡片发送失败（额度?），仍继续执行任务: {e}", flush=True)
 
     await _run_and_display(user_id, chat_id, is_group, text, card_msg_id, session, msg.message_id)
 
