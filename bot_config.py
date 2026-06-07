@@ -25,7 +25,9 @@ MIMO_BASE_URL = os.getenv("MIMO_BASE_URL", "https://token-plan-cn.xiaomimimo.com
 MIMO_API_KEY = os.getenv("MIMO_API_KEY", "")
 MIMO_MODEL = os.getenv("MIMO_MODEL", "mimo-v2.5-pro")
 
-SESSIONS_DIR = os.path.expanduser("~/.feishu-claude")
+# 每个 bot 按 App ID 独立 session 目录，避免多个 bot 进程共享同一个
+# sessions.json 时整份覆写互相冲掉对方的会话/设置数据。
+SESSIONS_DIR = os.path.expanduser(f"~/.feishu-claude/{FEISHU_APP_ID}")
 
 # 卡片按钮回调 HTTP 端口（需 ngrok 暴露）
 CALLBACK_PORT = int(os.getenv("CALLBACK_PORT", "9981"))
