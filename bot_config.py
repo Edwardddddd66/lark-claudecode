@@ -18,6 +18,12 @@ DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "claude-opus-4-6")
 DEFAULT_CWD = os.path.expanduser(os.getenv("DEFAULT_CWD", "~"))
 PERMISSION_MODE = os.getenv("PERMISSION_MODE", "bypassPermissions")
 
+# 访问白名单：逗号分隔的 open_id。为空 = 不限制（兼容原行为）。
+# 配置后只有名单内的 open_id 能驱动 bot（bypassPermissions 下等于 shell 权限，建议设上）。
+ALLOWED_OPEN_IDS = set(
+    x.strip() for x in os.getenv("ALLOWED_OPEN_IDS", "").split(",") if x.strip()
+)
+
 # Provider：anthropic = Claude Max/Pro 订阅（默认，走 CLI 自带登录），
 # mimo = 小米 MiMo API（需在 .env 配置 MIMO_API_KEY），可在飞书用 /provider 切换。
 DEFAULT_PROVIDER = os.getenv("DEFAULT_PROVIDER", "anthropic")

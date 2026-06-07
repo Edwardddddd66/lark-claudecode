@@ -15,6 +15,7 @@ fi
 
 # 直接指向各自的 env 文件，不再共享 .env（避免多 bot 同时启动的竞态）
 export BOT_ENV_FILE="$(pwd)/$ENV_FILE"
+export BOT_NAME="$BOT"
 echo "🚀 启动 bot: $BOT"
 echo "   配置文件: $BOT_ENV_FILE"
 exec .venv/bin/python3 main.py

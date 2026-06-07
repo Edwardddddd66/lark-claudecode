@@ -24,6 +24,10 @@ class ActiveRunRegistry:
     def get_run(self, user_id: str) -> Optional[ActiveRun]:
         return self._runs.get(user_id)
 
+    def any_active(self) -> bool:
+        """是否有任务正在执行（未被请求停止）。"""
+        return any(not r.stop_requested for r in self._runs.values())
+
     def attach_process(self, user_id: str, proc) -> Optional[ActiveRun]:
         active_run = self._runs.get(user_id)
         if active_run is None:

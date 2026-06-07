@@ -18,6 +18,13 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 # 确保项目目录在 sys.path 最前面
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# 最早设置按天切分日志（早于 lark 等库 import，确保库日志也进轮转文件）
+from log_setup import setup_logging
+setup_logging(
+    os.getenv("BOT_NAME", "bot"),
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs"),
+)
+
 import lark_oapi as lark
 from lark_oapi.api.im.v1.model import P2ImMessageReceiveV1
 from lark_oapi.event.callback.model.p2_card_action_trigger import (
@@ -46,10 +53,14 @@ def _watchdog():
         idle = time.time() - _last_event
 
         if uptime > MAX_UPTIME:
-            print(f"[watchdog] 运行 {uptime/3600:.1f}h，定时重启刷新连接", flush=True)
-            os._exit(0)
-
-        print(f"[watchdog] uptime={uptime/3600:.1f}h idle={idle/60:.0f}min", flush=True)
+            # 有任务在跑时推迟重启，避免打断长任务（下个检查周期再判断）
+            if _active_runs.any_active():
+                print(f"[watchdog] 到点（{uptime/3600:.1f}h）但有任务在跑，推迟重启", flush=True)
+            else:
+                print(f"[watchdog] 运行 {uptime/3600:.1f}h，定时重启刷新连接", flush=True)
+                os._exit(0)
+        else:
+            print(f"[watchdog] uptime={uptime/3600:.1f}h idle={idle/60:.0f}min", flush=True)
 
 
 # ── 全局单例 ──────────────────────────────────────────────────
@@ -209,6 +220,11 @@ async def handle_message_async(event: P2ImMessageReceiveV1):
     user_id, chat_id, is_group = extract_chat_info(event)
     print(f"[Chat Info] user={user_id[:8]}... chat={chat_id[:8]}... is_group={is_group}", flush=True)
 
+    # 访问白名单：配置了 ALLOWED_OPEN_IDS 时，名单外的发送者直接忽略（静默）
+    if config.ALLOWED_OPEN_IDS and user_id not in config.ALLOWED_OPEN_IDS:
+        print(f"[拒绝] open_id 不在白名单：{user_id}", flush=True)
+        return
+
     # /stop 和 / 在锁外处理（不需要排队等 Claude）
     if msg.message_type == "text":
         try:
@@ -241,11 +257,19 @@ async def handle_message_async(event: P2ImMessageReceiveV1):
         if not mentions:
             return  # 没有 @mention，忽略
 
-    # 自动打断：新消息到达时，停止该用户的活跃任务（模拟终端 Escape）
+    # 有任务在跑时不打断：回执「已收到」，新消息排队等当前任务完成后再处理。
+    # （要立即中止请发 /stop，已在锁外处理。）
     active = _active_runs.get_run(user_id)
     if active and not active.stop_requested:
-        print(f"[打断] 新消息到达，自动停止当前任务", flush=True)
-        await stop_run(_active_runs, user_id, on_stopped=_announce_interrupted)
+        print(f"[排队] 已有任务在跑，新消息排队等待", flush=True)
+        try:
+            ack = "⏳ 已收到，当前任务完成后接着处理（要中止发 /stop）"
+            if is_group:
+                await feishu.reply_card(msg.message_id, content=ack, loading=False)
+            else:
+                await feishu.send_card_to_user(user_id, content=ack, loading=False)
+        except Exception:
+            pass
 
     # 获取该群组的队列锁，保证同一群组消息串行处理，不同群组可并发
     if chat_id not in _chat_locks:
