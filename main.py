@@ -65,13 +65,15 @@ def _start_bot_loop():
 
 threading.Thread(target=_start_bot_loop, daemon=True, name="bot-loop").start()
 
-lark_client = lark.Client.builder() \
+builder = lark.Client.builder() \
     .app_id(config.FEISHU_APP_ID) \
     .app_secret(config.FEISHU_APP_SECRET) \
-    .log_level(lark.LogLevel.INFO) \
-    .build()
+    .log_level(lark.LogLevel.INFO)
+if config.FEISHU_DOMAIN:
+    builder = builder.domain(config.FEISHU_DOMAIN)
+lark_client = builder.build()
 
-feishu = FeishuClient(lark_client, app_id=config.FEISHU_APP_ID, app_secret=config.FEISHU_APP_SECRET)
+feishu = FeishuClient(lark_client, app_id=config.FEISHU_APP_ID, app_secret=config.FEISHU_APP_SECRET, domain=config.FEISHU_DOMAIN)
 store = SessionStore()
 _active_runs = ActiveRunRegistry()
 
@@ -1002,6 +1004,7 @@ def _start_ngrok(port):
 def main():
     print("🚀 飞书 Claude Bot 启动中...")
     print(f"   App ID      : {config.FEISHU_APP_ID}")
+    print(f"   Domain      : {config.FEISHU_DOMAIN}")
     print(f"   默认模型    : {config.DEFAULT_MODEL}")
     print(f"   默认工作目录: {config.DEFAULT_CWD}")
     print(f"   权限模式    : {config.PERMISSION_MODE}")
@@ -1020,12 +1023,15 @@ def main():
         .register_p2_card_action_trigger(on_card_action) \
         .build()
 
-    ws_client = lark.ws.Client(
-        config.FEISHU_APP_ID,
-        config.FEISHU_APP_SECRET,
+    ws_kwargs = dict(
+        app_id=config.FEISHU_APP_ID,
+        app_secret=config.FEISHU_APP_SECRET,
         event_handler=handler,
         log_level=lark.LogLevel.INFO,
     )
+    if config.FEISHU_DOMAIN:
+        ws_kwargs["domain"] = config.FEISHU_DOMAIN
+    ws_client = lark.ws.Client(**ws_kwargs)
 
     # 启动后台线程
     threading.Thread(target=_watchdog, daemon=True).start()

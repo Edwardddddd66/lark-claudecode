@@ -7,6 +7,9 @@ load_dotenv()
 FEISHU_APP_ID = os.environ["FEISHU_APP_ID"]
 FEISHU_APP_SECRET = os.environ["FEISHU_APP_SECRET"]
 
+# 飞书域名：国内用 open.feishu.cn，国际版用 open.larksuite.com
+FEISHU_DOMAIN = os.getenv("FEISHU_DOMAIN", "https://open.feishu.cn")
+
 CLAUDE_CLI = os.getenv("CLAUDE_CLI_PATH") or shutil.which("claude") or "claude"
 
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "claude-opus-4-6")
