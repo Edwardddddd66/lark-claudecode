@@ -9,7 +9,8 @@ import os
 import subprocess as sp
 from typing import Callable, Optional
 
-from bot_config import PERMISSION_MODE, CLAUDE_CLI
+from bot_config import PERMISSION_MODE, CLAUDE_CLI, DEFAULT_PROVIDER
+from providers import get_provider, PROVIDER_ENV_KEYS
 
 IDLE_TIMEOUT = 300  # 5 分钟无输出且无子进程，视为挂死
 _CHECK_INTERVAL = 30  # 静默时每 30 秒检查一次子进程
@@ -52,6 +53,7 @@ async def run_claude(
     model: Optional[str] = None,
     cwd: Optional[str] = None,
     permission_mode: Optional[str] = None,
+    provider: Optional[str] = None,
     on_text_chunk: Optional[Callable[[str], None]] = None,
     on_tool_use: Optional[Callable[[str, dict], None]] = None,
     on_process_start: Optional[Callable[[asyncio.subprocess.Process], None]] = None,
@@ -62,6 +64,10 @@ async def run_claude(
     Returns:
         (full_response_text, new_session_id, used_fresh_session_fallback)
     """
+
+    prov = get_provider(provider or DEFAULT_PROVIDER)
+    # provider 指定了模型（如 MiMo）就强制覆盖，否则沿用 session 模型
+    effective_model = prov["model"] or model
 
     async def _run_once(active_session_id: Optional[str]) -> tuple[str, Optional[str], int, str]:
         cmd = [
@@ -74,11 +80,22 @@ async def run_claude(
         ]
         if active_session_id:
             cmd += ["--resume", active_session_id]
-        if model:
-            cmd += ["--model", model]
+        if effective_model:
+            cmd += ["--model", effective_model]
 
         env = os.environ.copy()
         env.pop("CLAUDECODE", None)
+
+        # 先清掉可能从父进程继承的 provider 覆盖，保证基线干净（订阅模式不被污染）
+        for key in PROVIDER_ENV_KEYS:
+            env.pop(key, None)
+        # 按当前 provider 注入端点与密钥
+        for key, value in prov["env"].items():
+            if value:
+                env[key] = value
+        # MiMo 返回的 thinking 块 signature 为空，关闭扩展思考避免 400
+        if prov["disable_thinking"]:
+            env["MAX_THINKING_TOKENS"] = "0"
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,

@@ -8,3 +8,9 @@ dist/
 build/
 .DS_Store
 *.log
+
+# 部署密钥与机器相关文件（勿入库）
+.env.*
+!.env.example
+*.plist
+logs/

@@ -13,7 +13,8 @@ import sys
 from datetime import datetime
 from typing import Optional, Tuple
 
-from bot_config import CLAUDE_CLI, DEFAULT_CWD
+from bot_config import CLAUDE_CLI, DEFAULT_CWD, DEFAULT_PROVIDER
+from providers import PROVIDERS, get_provider, provider_label, is_available
 from session_store import SessionStore, scan_cli_sessions, generate_summary, _get_api_token, _write_custom_title
 
 PLUGINS_DIR = os.path.expanduser("~/.claude/plugins")
@@ -49,6 +50,7 @@ HELP_TEXT = """\
 `/resume` — 查看历史 sessions / `/resume [序号]` 恢复
 `/model [名称]` — 切换模型（opus / sonnet / haiku 或完整 ID）
 `/mode [模式]` — 切换权限模式（default / plan / acceptEdits / bypassPermissions）
+`/provider [名称]` — 切换后端（anthropic 订阅 / mimo），切换会自动开新 session
 `/status` — 显示当前 session 信息
 `/cd [路径]` — 切换工具执行的工作目录
 `/ls [路径]` — 查看当前工作目录下的文件/目录
@@ -87,7 +89,7 @@ def parse_command(text: str) -> Optional[Tuple[str, str]]:
 # Bot 自身处理的命令，其余 /xxx 转发给 Claude
 BOT_COMMANDS = {
     "help", "h", "new", "clear", "resume", "model", "mode", "status", "cd", "ls",
-    "workspace", "ws", "skills", "mcp", "usage", "stop",
+    "workspace", "ws", "skills", "mcp", "usage", "stop", "provider",
 }
 
 
@@ -625,10 +627,40 @@ async def handle_command(
         await store.set_model(user_id, chat_id, model)
         return f"✅ 已切换模型为 `{model}`"
 
+    elif cmd == "provider":
+        if not args:
+            cur = await store.get_current_raw(user_id, chat_id)
+            curp = cur.get("provider", DEFAULT_PROVIDER)
+            return {
+                "text": (
+                    f"当前后端：**{provider_label(curp)}**\n"
+                    "切换会自动开启新 session（两端历史格式不兼容）。"
+                ),
+                "buttons": [
+                    {"text": "🅰️ Anthropic 订阅", "value": {"action": "run_cmd", "cmd": "/provider anthropic", "cid": chat_id}},
+                    {"text": "🟠 MiMo", "value": {"action": "run_cmd", "cmd": "/provider mimo", "cid": chat_id}},
+                ],
+            }
+        # 兼容 cc-connect 风格的 "/provider switch mimo"
+        parts = args.split()
+        name = (parts[1] if parts[0].lower() == "switch" and len(parts) > 1 else parts[0]).lower()
+        if name not in PROVIDERS:
+            return f"❌ 未知后端：`{name}`，可选：{', '.join(f'`{p}`' for p in PROVIDERS)}"
+        if not is_available(name):
+            return f"❌ 后端 `{name}` 未配置密钥，请在 `.env` 设置 `MIMO_API_KEY` 后重启。"
+        await store.set_provider(user_id, chat_id, name)
+        await store.new_session(user_id, chat_id)
+        p = get_provider(name)
+        model_note = f"，模型固定为 `{p['model']}`" if p["model"] else ""
+        return f"✅ 已切换后端为 **{provider_label(name)}**{model_note}，并开启新 session。"
+
     elif cmd == "status":
         cur = await store.get_current_raw(user_id, chat_id)
         sid = cur.get("session_id") or "（新 session）"
-        model = cur.get("model", "未知")
+        prov = cur.get("provider", DEFAULT_PROVIDER)
+        prov_cfg = get_provider(prov)
+        # MiMo 会强制模型，展示真实生效的模型
+        model = prov_cfg["model"] or cur.get("model", "未知")
         cwd = cur.get("cwd", "~")
         workspace = cur.get("workspace") or "（未绑定）"
         started = cur.get("started_at", "")[:16].replace("T", " ")
@@ -636,6 +668,7 @@ async def handle_command(
         return (
             f"📊 **当前 Session 状态**\n"
             f"Session ID: `{sid}`\n"
+            f"后端: `{provider_label(prov)}`\n"
             f"模型: `{model}`\n"
             f"权限模式: `{mode}`\n"
             f"工作空间: `{workspace}`\n"

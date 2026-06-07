@@ -125,6 +125,7 @@ _COMMAND_MENU_GROUPS = [
     ]),
     ("**配置**", [
         {"text": "🔄 切模型",      "value": {"action": "run_cmd", "cmd": "/model"}},
+        {"text": "🔀 切后端",      "value": {"action": "run_cmd", "cmd": "/provider"}},
         {"text": "⚙️ 切模式",      "value": {"action": "run_cmd", "cmd": "/mode"}},
         {"text": "📁 工作空间",    "value": {"action": "run_cmd", "cmd": "/ws"}},
     ]),
@@ -359,6 +360,7 @@ async def _run_and_display(
             model=session.model,
             cwd=session.cwd,
             permission_mode=session.permission_mode,
+            provider=session.provider,
             on_text_chunk=on_text_chunk,
             on_tool_use=on_tool_use,
             on_process_start=lambda proc: _active_runs.attach_process(user_id, proc),

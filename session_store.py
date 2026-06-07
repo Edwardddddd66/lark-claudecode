@@ -8,7 +8,7 @@ import urllib.error
 from datetime import datetime
 from typing import Optional
 
-from bot_config import SESSIONS_DIR, DEFAULT_MODEL, DEFAULT_CWD, PERMISSION_MODE
+from bot_config import SESSIONS_DIR, DEFAULT_MODEL, DEFAULT_CWD, PERMISSION_MODE, DEFAULT_PROVIDER
 
 CLAUDE_PROJECTS_DIR = os.path.expanduser("~/.claude/projects")
 
@@ -278,12 +278,14 @@ class Session:
         cwd: str,
         permission_mode: str,
         workspace: str = "",
+        provider: str = DEFAULT_PROVIDER,
     ):
         self.session_id = session_id
         self.model = model
         self.cwd = cwd
         self.permission_mode = permission_mode
         self.workspace = workspace
+        self.provider = provider
 
 
 class SessionStore:
@@ -359,6 +361,7 @@ class SessionStore:
             "model": DEFAULT_MODEL,
             "cwd": DEFAULT_CWD,
             "permission_mode": PERMISSION_MODE,
+            "provider": DEFAULT_PROVIDER,
             "started_at": datetime.now().isoformat(),
             "preview": "",
             "workspace": "",
@@ -443,6 +446,7 @@ class SessionStore:
             cwd=cur.get("cwd", DEFAULT_CWD),
             permission_mode=cur.get("permission_mode", PERMISSION_MODE),
             workspace=cur.get("workspace", ""),
+            provider=cur.get("provider", DEFAULT_PROVIDER),
         )
 
     async def on_claude_response(self, user_id: str, chat_id: str, new_session_id: str, first_message: str):
@@ -500,6 +504,7 @@ class SessionStore:
             "model": cur.get("model", DEFAULT_MODEL),
             "cwd": cur.get("cwd", DEFAULT_CWD),
             "permission_mode": cur.get("permission_mode", PERMISSION_MODE),
+            "provider": cur.get("provider", DEFAULT_PROVIDER),
             "started_at": datetime.now().isoformat(),
             "preview": "",
             "workspace": cur.get("workspace", ""),
@@ -511,6 +516,12 @@ class SessionStore:
         """Set model for a specific chat"""
         chat_data = await self._ensure_chat_data(user_id, chat_id)
         chat_data["current"]["model"] = model
+        await self._save_async()
+
+    async def set_provider(self, user_id: str, chat_id: str, provider: str):
+        """Set provider (anthropic / mimo) for a specific chat"""
+        chat_data = await self._ensure_chat_data(user_id, chat_id)
+        chat_data["current"]["provider"] = provider
         await self._save_async()
 
     async def set_cwd(self, user_id: str, chat_id: str, cwd: str, workspace_name: Optional[str] = None):
