@@ -34,3 +34,7 @@ CALLBACK_PORT = int(os.getenv("CALLBACK_PORT", "9981"))
 
 # 流式卡片更新：每积累多少字符推送一次
 STREAM_CHUNK_SIZE = int(os.getenv("STREAM_CHUNK_SIZE", "20"))
+
+# 流式卡片最小推送间隔（秒）。每次推送都消耗一次 Lark API 额度。
+# 设为 0 = 关闭流式中间更新，只在回复完成后发一次（最省额度，约省 30-40 倍）。
+STREAM_PUSH_INTERVAL = float(os.getenv("STREAM_PUSH_INTERVAL", "0.4"))

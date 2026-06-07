@@ -280,7 +280,8 @@ async def _run_and_display(
     plan_exited = False  # Claude 调了 ExitPlanMode
     last_push_time = 0.0
     push_failures = 0
-    _PUSH_INTERVAL = 0.4
+    _PUSH_INTERVAL = config.STREAM_PUSH_INTERVAL
+    _STREAM_LIVE = _PUSH_INTERVAL > 0  # 0 表示关闭流式中间更新，只发最终结果（省 Lark 额度）
     _MAX_STREAM_DISPLAY = 2500
 
     async def push(content: str):
@@ -333,19 +334,23 @@ async def _run_and_display(
                 if detected:
                     ask_options.clear()
                     ask_options.extend(detected)
-                await push(_build_display())
+                if _STREAM_LIVE:
+                    await push(_build_display())
                 return
         tool_line = _format_tool(name, inp)
         if inp and tool_history:
             tool_history[-1] = tool_line
         else:
             tool_history.append(tool_line)
-        await push(_build_display())
-        last_push_time = time.time()
+        if _STREAM_LIVE:
+            await push(_build_display())
+            last_push_time = time.time()
 
     async def on_text_chunk(chunk: str):
         nonlocal accumulated, last_push_time
         accumulated += chunk
+        if not _STREAM_LIVE:
+            return  # 关闭流式中间更新，内容只在最终一次性发出
         now = time.time()
         if now - last_push_time >= _PUSH_INTERVAL:
             await push(_build_display())
