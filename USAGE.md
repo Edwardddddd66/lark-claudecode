@@ -111,6 +111,24 @@ cd ~/Claude/Projects/lark-claudecode
 3. 仿照 `com.lark-claude.huapishe.plist` 建一份新 plist，指向 `start.sh <新名>`
 4. `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.lark-claude.<新名>.plist`
 
+## （可选）启用交互按钮：ngrok 隧道
+
+按钮（plan 审批、选项点击、命令菜单、`/provider` 按钮）需要把本机回调端口暴露给 Lark。
+不配也能用——所有命令都能手敲，按钮只是便利。
+
+**前提与限制（重要）：**
+- 需要 ngrok 账号（免费）：`ngrok config add-authtoken <你的token>`
+- 想重启后 URL 不变，需固定域名（ngrok 免费提供 1 个）：在对应 `.env.<bot>` 设 `NGROK_DOMAIN=xxx.ngrok-free.app`
+- **免费版同时只能开 1 条隧道**，两个 bot（端口 9981/9982）要按钮得各一条 → 免费版只能覆盖其中一个 bot，两个都要需付费
+- 每个 bot 是独立 Lark 应用，回调要在**各自**开发者后台配：事件与回调 → 卡片交互配置 → 回调地址填 `https://<域名>/callback`
+- 配额耗尽期间按钮也发不出卡片更新（按钮交互同样吃发送额度），建议额度恢复/升级后再启用
+
+**步骤：**
+1. `ngrok config add-authtoken <token>`
+2. 在 `.env.<bot>` 设 `NGROK_DOMAIN=<你的固定域名>`
+3. `./redeploy.sh` 重启，启动日志会打印回调 URL
+4. 把该 URL 填进对应 Lark 应用后台的卡片交互回调地址
+
 ## 五、配置 MiMo 后端
 
 在对应 `.env.<bot>` 填入 `MIMO_API_KEY`（其余 MiMo 变量见 `.env.example`，有默认值），
